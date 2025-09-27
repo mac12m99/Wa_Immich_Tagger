@@ -95,7 +95,10 @@ def main(args):
     LEFT JOIN chat ON message_media.chat_row_id = chat._id
     LEFT JOIN message on message_media.message_row_id = message._id
     LEFT JOIN jid on jid._id = message.sender_jid_row_id
-    LEFT JOIN wa.wa_contacts on wa.wa_contacts.jid = jid.raw_string
+    --sometimes real id is stored in jid_map...
+	LEFT JOIN jid_map on jid_map.lid_row_id = message.sender_jid_row_id
+	LEFT JOIN jid as jid2 on jid2._id = jid_map.jid_row_id
+    LEFT JOIN wa.wa_contacts on (wa.wa_contacts.jid = jid.raw_string or wa.wa_contacts.jid = jid2.raw_string)
     WHERE  (message_media.file_path like 'Media/WhatsApp Images/%' or message_media.file_path like 'Media/WhatsApp Video/%') and chat.subject is not NULL
     """)
 
@@ -130,6 +133,7 @@ def main(args):
             else:
                 skipped += 1
             print('Tagged: {0} - Skipped: {1} - Not found: {2}'.format(tagged, skipped, not_found), end='\r')
+    print()
 
 
 if __name__ == '__main__':
@@ -137,8 +141,8 @@ if __name__ == '__main__':
         prog='Wa_Immich_Tagger.py',
         description='Connect to WhatsApp database, extract info about its media (chats name, sender, timestamp and description) and push that to Immich',
         epilog='You need root access for now, or an undecrypted backup')
-    parser.add_argument('-msg', '--msgstore',  default='/data/data/com.whatsapp/databases/msgstore.db', help='msgstore.db location, defaults to WhatsApp data folder')
-    parser.add_argument('-wa', '--wa', default='/data/data/com.whatsapp/databases/wa.db', help='wa.db location, defaults to WhatsApp data folder')
+    parser.add_argument('-msg', '--msgstore',  default='msgstore.db', help='msgstore.db location, defaults to current folder')
+    parser.add_argument('-wa', '--wa', default='wa.db', help='wa.db location, defaults to current folder')
     parser.add_argument('-i', '--immich', help='Immich server url (with http(s) and port)', required=True)
     parser.add_argument('-k', '--api_key', help='Immich api key', required=True)
     parser.add_argument('-w', '--workers', default=50, help='Number of maximum threads')
