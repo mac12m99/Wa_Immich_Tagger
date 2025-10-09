@@ -89,17 +89,24 @@ def main(args):
 
     print('Executing db query')
     cursor.execute("""
-    SELECT message._id, message.timestamp, message_media.file_path, message_media.mime_type,
-           message_media.chat_row_id,  chat.subject, jid.user, jid.raw_string, wa.wa_contacts.display_name, message.text_data
-    FROM message_media
-    LEFT JOIN chat ON message_media.chat_row_id = chat._id
-    LEFT JOIN message on message_media.message_row_id = message._id
-    LEFT JOIN jid on jid._id = message.sender_jid_row_id
-    --sometimes real id is stored in jid_map...
-	LEFT JOIN jid_map on jid_map.lid_row_id = message.sender_jid_row_id
-	LEFT JOIN jid as jid2 on jid2._id = jid_map.jid_row_id
-    LEFT JOIN wa.wa_contacts on (wa.wa_contacts.jid = jid.raw_string or wa.wa_contacts.jid = jid2.raw_string)
-    WHERE  (message_media.file_path like 'Media/WhatsApp Images/%' or message_media.file_path like 'Media/WhatsApp Video/%') and chat.subject is not NULL
+	SELECT message._id, message.timestamp, message_media.file_path, message_media.mime_type, message_media.chat_row_id, 
+		COALESCE(chat.subject, chat_contact.display_name, chat_jid.user, chat_jid.raw_string) AS chat_name, jid.user, jid.raw_string AS sender_raw, wa.wa_contacts.display_name AS sender_name, message.text_data
+	FROM message_media
+	LEFT JOIN chat ON message_media.chat_row_id = chat._id
+	LEFT JOIN message ON message_media.message_row_id = message._id
+	LEFT JOIN jid ON jid._id = message.sender_jid_row_id
+	LEFT JOIN jid_map ON jid_map.lid_row_id = message.sender_jid_row_id
+	LEFT JOIN jid AS jid2 ON jid2._id = jid_map.jid_row_id
+	LEFT JOIN wa.wa_contacts ON (wa.wa_contacts.jid = jid.raw_string OR wa.wa_contacts.jid = jid2.raw_string)
+	LEFT JOIN jid AS chat_jidm ON chat_jid._id = chat.jid_row_id
+	LEFT JOIN wa.wa_contacts AS chat_contact ON chat_contact.jid = chat_jid.raw_string
+	WHERE
+	(
+	message_media.file_path LIKE 'Media/WhatsApp Images/%'
+	OR message_media.file_path LIKE 'Media/WhatsApp Video/%'
+	OR message_media.file_path LIKE 'Media/WhatsApp Business Images/%'
+	OR message_media.file_path LIKE 'Media/WhatsApp Business Video/%'
+	)
     """)
 
     headers = {
