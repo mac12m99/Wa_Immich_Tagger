@@ -101,7 +101,9 @@ def main(args):
         import json
         args.msgstore = msgstore_backup_location
         subprocess.run(['pkg', 'install', 'termux-api'])
-        termux_contacts = json.loads(subprocess.run(['termux-contacts-list'], stdout=subprocess.PIPE).stdout)
+        subprocess.run(['termux-api-start'])
+        subprocess.run(['termux-setup-storage'])
+        termux_contacts = json.loads(subprocess.run(['termux-contact-list'], stdout=subprocess.PIPE).stdout)
         contacts = {c['number'][1:]: c['name'] for c in termux_contacts}
 
     # handle encrypted msgstore backup (with e2e)

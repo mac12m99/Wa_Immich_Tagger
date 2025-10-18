@@ -60,11 +60,15 @@ python Wa_Immich_Tagger.py -i http://your_install:2283 -k your_api_key -mode adb
 ```
 
 ## Easy method #2, using Termux (Experimental)
-Do an e2e local backup from Whatsapp, open termux (download this script) and run
+- Download termux and termux-api from F-Droid (from Play Store it will fail at gaining contacts)
+- pkg install python
+- See download section, copy paste entire code
+- Do an e2e local backup from Whatsapp
+- Run
 ```console
 python Wa_Immich_Tagger.py -i http://your_install:2283 -k your_api_key -mode termux -e2e your_e2e_key
 ```
-IMPORTANT NOTE: you have to use termux from F-Droid, from Play Store it will fail at gaining contacts.
+You will be asked access to contacts and storage, say yes.
 
 ## Standard Usage
 Place msgstore.db in the same folder for convenience (or add -msg).
