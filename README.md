@@ -43,11 +43,30 @@ Use wa-crypt-tools to decrypt
 wadecrypt your_key msgstore.db.crypt15 msgstore.db
 ```
 
-## Usage
-Download this script
+## Download
+Just run, in a new directory
 ```console
 curl -O https://raw.githubusercontent.com/mac12m99/Wa_Immich_Tagger/refs/heads/main/Wa_Immich_Tagger.py
+python -m pip install requests
+# if you want this script to also decrypt
+python -m pip install wa-crypt-tools
 ```
+
+## Easy method #1, using ADB (Experimental)
+Do an e2e local backup from Whatsapp, connect the phone using usb cable, enable ADB and be sure the device is authorized (run adb devices first).
+When you are ready:
+```console
+python Wa_Immich_Tagger.py -i http://your_install:2283 -k your_api_key -mode adb -e2e your_e2e_key
+```
+
+## Easy method #2, using Termux (Experimental)
+Do an e2e local backup from Whatsapp, open termux (download this script) and run
+```console
+python Wa_Immich_Tagger.py -i http://your_install:2283 -k your_api_key -mode termux -e2e your_e2e_key
+```
+IMPORTANT NOTE: you have to use termux from F-Droid, from Play Store it will fail at gaining contacts.
+
+## Standard Usage
 Place msgstore.db in the same folder for convenience (or add -msg).
 
 Obtain contacts via adb

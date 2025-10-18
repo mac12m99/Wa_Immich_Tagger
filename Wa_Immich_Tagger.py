@@ -2,10 +2,13 @@ import argparse
 import json
 import os.path
 import sqlite3
+import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import requests
 import re
+
+msgstore_backup_location = '/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Databases/msgstore.db.crypt15'
 
 def job(headers, immich_url, im_tags, timestamp, file_path, chat_name, sender_name, text):
     # searching if whatsapp media exists and obtain id
@@ -81,7 +84,44 @@ def job(headers, immich_url, im_tags, timestamp, file_path, chat_name, sender_na
         return None
 
 def main(args):
-    # Connessione ai database WhatsApp
+    contacts = {}
+
+    if args.mode == 'adb':
+        print('Pulling msgstore backup from adb..')
+        subprocess.run(
+            ['adb', 'pull', msgstore_backup_location, 'msgstore.db.crypt15'])
+        args.msgstore = 'msgstore.db.crypt15'
+
+        contacts = subprocess.run(['adb', 'shell', 'content', 'query', '--uri', 'content://com.android.contacts/data', '--projection', 'display_name:data1',
+                       '|', 'grep', '@s.whatsapp.net'], stdout=subprocess.PIPE)
+        args.contacts = 'wa_contacts'
+        open(args.contacts, 'wb').write(contacts.stdout)
+
+    if args.mode == 'termux':
+        import json
+        args.msgstore = msgstore_backup_location
+        subprocess.run(['pkg', 'install', 'termux-api'])
+        termux_contacts = json.loads(subprocess.run(['termux-contacts-list'], stdout=subprocess.PIPE).stdout)
+        contacts = {c['number'][1:]: c['name'] for c in termux_contacts}
+
+    # handle encrypted msgstore backup (with e2e)
+    if args.msgstore.endswith('.crypt15'):
+        if not args.e2e_key:
+            print('Detected crypted msgstore, e2e parameter needed')
+            exit()
+        from wa_crypt_tools.lib.db.dbfactory import DatabaseFactory
+        from wa_crypt_tools.lib.key.keyfactory import KeyFactory
+        import zlib
+
+        msg = open(args.msgstore, 'rb')
+        db = DatabaseFactory.from_file(msg)
+        key = KeyFactory.new(args.e2e_key)
+        output_decrypted: bytearray = db.decrypt(key, msg.read())
+        z_obj = zlib.decompressobj()
+        output_file = z_obj.decompress(output_decrypted)
+        args.msgstore = 'msgstore.db'
+        open(args.msgstore, 'wb').write(output_file)
+
     print('Connecting to ' + args.msgstore)
     conn = sqlite3.connect(args.msgstore)
     cursor = conn.cursor()
@@ -112,7 +152,6 @@ def main(args):
     res = cursor.fetchall()
     print('Returned {0} rows'.format(len(res)))
 
-    contacts = {}
     if args.contacts:
         print('Reading ' + args.contacts)
         for name, number in re.findall("display_name=([^,]+), data1=([^@]+)", open(args.contacts, 'r').read()):
@@ -159,8 +198,10 @@ if __name__ == '__main__':
         prog='Wa_Immich_Tagger.py',
         description='Connect to WhatsApp database, extract info about its media (chats name, sender, timestamp and description) and push that to Immich',
         epilog='You need root access for now, or an undecrypted backup')
-    parser.add_argument('-msg', '--msgstore',  default='msgstore.db', help='msgstore.db location, defaults to current folder')
-    parser.add_argument('-c', '--contacts', help='contacts adb export location, if not assigned phone numbers are used instead')
+    parser.add_argument('-mode', '--mode',  help='adb=pulls e2e backup and contacts from adb, termux=you are running this script directly on your phone using termux')
+    parser.add_argument('-msg', '--msgstore',  default='msgstore.db', help='msgstore.db[.crypt15] location, defaults to current folder')
+    parser.add_argument('-e2e', '--e2e_key', help='If you have encrypted msgstore.db with e2e encryption, insert the key here')
+    parser.add_argument('-c', '--contacts', help='contacts adb export location, not needed using modes')
     parser.add_argument('-i', '--immich', help='Immich server url (with http(s) and port)', required=True)
     parser.add_argument('-k', '--api_key', help='Immich api key', required=True)
     parser.add_argument('-w', '--workers', default=50, help='Number of maximum threads')
