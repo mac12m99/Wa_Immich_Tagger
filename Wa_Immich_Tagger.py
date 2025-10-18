@@ -84,22 +84,18 @@ def main(args):
     print('Connecting to ' + args.msgstore)
     conn = sqlite3.connect(args.msgstore)
     cursor = conn.cursor()
-    cursor.execute("ATTACH DATABASE '{0}' AS wa".format(args.wa))
-    print('Connecting to ' + args.wa)
 
     print('Executing db query')
     cursor.execute("""
 	SELECT message._id, message.timestamp, message_media.file_path, message_media.mime_type, message_media.chat_row_id, 
-		COALESCE(chat.subject, chat_contact.display_name, chat_jid.user, chat_jid.raw_string) AS chat_name, jid.user, jid.raw_string AS sender_raw, wa.wa_contacts.display_name AS sender_name, message.text_data
+		COALESCE(chat.subject, chat_jid.user, chat_jid.raw_string) AS chat_name, jid.user, jid.raw_string AS sender_raw, IFNULL(jid2.user, jid.user) AS sender_name, message.text_data
 	FROM message_media
 	LEFT JOIN chat ON message_media.chat_row_id = chat._id
 	LEFT JOIN message ON message_media.message_row_id = message._id
 	LEFT JOIN jid ON jid._id = message.sender_jid_row_id
 	LEFT JOIN jid_map ON jid_map.lid_row_id = message.sender_jid_row_id
 	LEFT JOIN jid AS jid2 ON jid2._id = jid_map.jid_row_id
-	LEFT JOIN wa.wa_contacts ON (wa.wa_contacts.jid = jid.raw_string OR wa.wa_contacts.jid = jid2.raw_string)
-	LEFT JOIN jid AS chat_jidm ON chat_jid._id = chat.jid_row_id
-	LEFT JOIN wa.wa_contacts AS chat_contact ON chat_contact.jid = chat_jid.raw_string
+	LEFT JOIN jid AS chat_jid ON chat_jid._id = chat.jid_row_id
 	WHERE
 	(
 	message_media.file_path LIKE 'Media/WhatsApp Images/%'
@@ -149,7 +145,6 @@ if __name__ == '__main__':
         description='Connect to WhatsApp database, extract info about its media (chats name, sender, timestamp and description) and push that to Immich',
         epilog='You need root access for now, or an undecrypted backup')
     parser.add_argument('-msg', '--msgstore',  default='msgstore.db', help='msgstore.db location, defaults to current folder')
-    parser.add_argument('-wa', '--wa', default='wa.db', help='wa.db location, defaults to current folder')
     parser.add_argument('-i', '--immich', help='Immich server url (with http(s) and port)', required=True)
     parser.add_argument('-k', '--api_key', help='Immich api key', required=True)
     parser.add_argument('-w', '--workers', default=50, help='Number of maximum threads')
