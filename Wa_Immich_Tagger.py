@@ -5,6 +5,7 @@ import sqlite3
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import requests
+import re
 
 def job(headers, immich_url, im_tags, timestamp, file_path, chat_name, sender_name, text):
     # searching if whatsapp media exists and obtain id
@@ -84,13 +85,11 @@ def main(args):
     print('Connecting to ' + args.msgstore)
     conn = sqlite3.connect(args.msgstore)
     cursor = conn.cursor()
-    cursor.execute("ATTACH DATABASE '{0}' AS wa".format(args.wa))
-    print('Connecting to ' + args.wa)
 
     print('Executing db query')
     cursor.execute("""
     SELECT message._id, message.timestamp, message_media.file_path, message_media.mime_type,
-           message_media.chat_row_id,  chat.subject, jid.user, jid.raw_string, wa.wa_contacts.display_name, message.text_data
+           message_media.chat_row_id,  chat.subject, ifnull(jid2.user, jid.user) as Sender, message.text_data
     FROM message_media
     LEFT JOIN chat ON message_media.chat_row_id = chat._id
     LEFT JOIN message on message_media.message_row_id = message._id
@@ -98,9 +97,27 @@ def main(args):
     --sometimes real id is stored in jid_map...
 	LEFT JOIN jid_map on jid_map.lid_row_id = message.sender_jid_row_id
 	LEFT JOIN jid as jid2 on jid2._id = jid_map.jid_row_id
-    LEFT JOIN wa.wa_contacts on (wa.wa_contacts.jid = jid.raw_string or wa.wa_contacts.jid = jid2.raw_string)
     WHERE  (message_media.file_path like 'Media/WhatsApp Images/%' or message_media.file_path like 'Media/WhatsApp Video/%') and chat.subject is not NULL
+    union all
+    --chat with contacts
+    SELECT message._id, message.timestamp, message_media.file_path, message_media.mime_type,
+           message_media.chat_row_id,  null, jid.user as Sender, message.text_data
+    FROM message_media
+    LEFT JOIN chat ON message_media.chat_row_id = chat._id
+    LEFT JOIN message on message_media.message_row_id = message._id
+    LEFT JOIN jid on jid._id = chat.jid_row_id
+    WHERE  (message_media.file_path like 'Media/WhatsApp Images/%' or message_media.file_path like 'Media/WhatsApp Video/%') and chat.subject is NULL
     """)
+
+    res = cursor.fetchall()
+    print('Returned {0} rows'.format(len(res)))
+
+    contacts = {}
+    if args.contacts:
+        print('Reading ' + args.contacts)
+        for name, number in re.findall("display_name=([^,]+), data1=([^@]+)", open(args.contacts, 'r').read()):
+            contacts[number] = name
+        print('Loaded {0} contacts'.format(len(contacts)))
 
     headers = {
         'Content-Type': 'application/json',
@@ -110,15 +127,16 @@ def main(args):
     im_tags = requests.request("GET", args.immich + '/api/tags', headers=headers).json()
 
     # non-concurrent version for debug purposes
-    #for _, timestamp, file_path, _, _, chat_name, _, _, sender_name, text in cursor.fetchall():
+    #for _, timestamp, file_path, _, _, chat_name, sender, text in cursor.fetchall():
     #    job(headers, args.immich, im_tags, timestamp, file_path, chat_name, sender_name, text)
 
     jobs = []
     with ThreadPoolExecutor(max_workers=args.workers) as executor:
-        res = cursor.fetchall()
-        print('Returned {0} rows'.format(len(res)))
-        for _, timestamp, file_path, _, _, chat_name, _, _, sender_name, text in res:
-            jobs.append(executor.submit(job, headers, args.immich, im_tags, timestamp, file_path, chat_name, sender_name, text))
+        for _, timestamp, file_path, _, _, chat_name, sender, text in res:
+            if not chat_name: #if null it's a single person chat, its name is the contact name
+                chat_name = contacts.get(sender, sender)
+            sender = contacts.get(sender, sender)
+            jobs.append(executor.submit(job, headers, args.immich, im_tags, timestamp, file_path, chat_name, sender, text))
         conn.close()
 
         not_found = 0
@@ -142,7 +160,7 @@ if __name__ == '__main__':
         description='Connect to WhatsApp database, extract info about its media (chats name, sender, timestamp and description) and push that to Immich',
         epilog='You need root access for now, or an undecrypted backup')
     parser.add_argument('-msg', '--msgstore',  default='msgstore.db', help='msgstore.db location, defaults to current folder')
-    parser.add_argument('-wa', '--wa', default='wa.db', help='wa.db location, defaults to current folder')
+    parser.add_argument('-c', '--contacts', help='contacts adb export location, if not assigned phone numbers are used instead')
     parser.add_argument('-i', '--immich', help='Immich server url (with http(s) and port)', required=True)
     parser.add_argument('-k', '--api_key', help='Immich api key', required=True)
     parser.add_argument('-w', '--workers', default=50, help='Number of maximum threads')
