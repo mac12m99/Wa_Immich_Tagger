@@ -23,7 +23,7 @@ msgstore.db| chat    | subject   |Tag WhatsApp/Chat/[Chat name]
 msgstore.db| jid     | user      |Tag WhatsApp/Sender/[Contact name] <- phone number if could not find it in contacts
 msgstore.db| message | text_data |Asset description
 
-## Obtaining undecrypted WhatsApp db
+## Obtaining unecrypted WhatsApp db
 if you have root just take it from /data/data/com.whatsapp/databases/.
 
 If not, go to Settings -> Chat -> Backup -> end to end backup -> Criptographic key (NOT password)\
